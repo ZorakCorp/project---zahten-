@@ -90,6 +90,11 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
 } else {
   const app = express();
 
+  // Behind AWS ALB / nginx: set TRUST_PROXY=1 so req.secure / IP reflect forwarded proto/client.
+  if (process.env.TRUST_PROXY === "1") {
+    app.set("trust proxy", 1);
+  }
+
   if (process.env.DISABLE_COMPRESSION !== "1") {
     app.use(compression());
   }
@@ -124,7 +129,18 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
     const runWithHttpContext: RunWithHttpContextFunction = build.entry.module.runWithHttpContext;
 
     app.use((req, res, next) => {
-      // helpful headers:
+      // Baseline hardening (OWASP / modern browser security). CORP omitted — would
+      // break cross-origin static assets; CSP is app-specific and not set here.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+      res.setHeader("X-DNS-Prefetch-Control", "off");
+      res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+      res.setHeader(
+        "Permissions-Policy",
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()"
+      );
+
+      // HSTS: long max-age; only meaningful over HTTPS (browsers ignore on http://localhost).
       res.set("Strict-Transport-Security", `max-age=${60 * 60 * 24 * 365 * 100}`);
 
       // Add X-Robots-Tag header for test-cloud.trigger.dev
@@ -143,8 +159,9 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
     });
 
     app.use((req, res, next) => {
-      // Generate a unique request ID for each request
+      // Generate a unique request ID for each request (incident response / support correlation)
       const requestId = nanoid();
+      res.setHeader("X-Request-Id", requestId);
       const abortController = new AbortController();
       res.on("close", () => abortController.abort());
 

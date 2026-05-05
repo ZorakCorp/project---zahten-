@@ -4,7 +4,7 @@ import { sanitizeRedirectPath } from "~/utils";
 import { extractClientIp } from "~/utils/extractClientIp.server";
 import { authenticator } from "./auth.server";
 import { getImpersonationId } from "./impersonation.server";
-import { logger } from "./logger.server";
+import { recordSecurityEvent } from "./securityAudit.server";
 
 /**
  * Logs the user out when their session has lived past `User.nextSessionEnd`.
@@ -42,17 +42,17 @@ function maybeAutoLogout(
   // route's own loader (which destroys the session cookie) would never run.
   if (new URL(request.url).pathname === "/logout") return;
 
-  // HIPAA audit trail: structured log lands in CloudWatch via stdout. Use
-  // the stable `event` field to filter/aggregate auto-logout events.
-  // `sourceIp` uses ALB's appended (last) X-Forwarded-For element, not the
-  // first one, since the leading element is client-supplied and spoofable.
-  logger.info("Auto-logout: session exceeded effective duration", {
+  // HIPAA / audit trail: stable `event` for existing SIEM filters; `securityEvent` for
+  // unified security logging. `sourceIp` uses ALB's appended (last) X-Forwarded-For.
+  recordSecurityEvent("session.auto_logout", {
+    severity: "info",
     event: "session.auto_logout",
     userId: user.id,
     impersonatedUserId,
     nextSessionEnd: user.nextSessionEnd.toISOString(),
     requestPath: new URL(request.url).pathname,
     sourceIp: extractClientIp(request.headers.get("x-forwarded-for")),
+    reason: "session_exceeded_effective_duration",
   });
   throw redirect("/logout");
 }
