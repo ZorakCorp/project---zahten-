@@ -6,6 +6,14 @@ import { AnimatedNumber } from "../AnimatedNumber";
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
 
+/** Safe fragment for unquoted `data-chart` attribute selectors (prevents CSS injection). */
+function sanitizeChartCssIdent(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
+/** Chart config keys become CSS custom property suffixes; allow only safe identifiers. */
+const SAFE_CHART_CONFIG_KEY = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+
 export type ChartState = "loading" | "noData" | "invalid" | "loaded" | undefined;
 
 export type ChartConfig = {
@@ -43,7 +51,9 @@ const ChartContainer = React.forwardRef<
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId();
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  const fallbackId = uniqueId.replace(/:/g, "");
+  const sanitizedPropId = id ? sanitizeChartCssIdent(id) : "";
+  const chartId = `chart-${sanitizedPropId || fallbackId}`;
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -80,6 +90,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
+    if (!SAFE_CHART_CONFIG_KEY.test(key)) return null;
     const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
     return color ? `  --color-${key}: ${color};` : null;
   })

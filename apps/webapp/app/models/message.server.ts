@@ -3,6 +3,7 @@ import { redirect, typedjson } from "remix-typedjson";
 import { ButtonVariant } from "~/components/primitives/Buttons";
 import { env } from "~/env.server";
 import { type FeedbackType } from "~/routes/resources.feedback";
+import { sanitizeRedirectPath } from "~/utils/sanitizeRedirectPath";
 
 export type ToastMessage = {
   message: string;
@@ -189,7 +190,7 @@ export async function redirectWithSuccessMessage(
 
   setSuccessMessage(session, message, options);
 
-  return redirect(path, {
+  return redirect(sanitizeRedirectPath(path), {
     headers: {
       "Set-Cookie": await commitSession(session, {
         expires: new Date(Date.now() + ONE_YEAR),
@@ -208,7 +209,7 @@ export async function redirectWithErrorMessage(
 
   setErrorMessage(session, message, options);
 
-  return redirect(path, {
+  return redirect(sanitizeRedirectPath(path), {
     headers: {
       "Set-Cookie": await commitSession(session, {
         expires: new Date(Date.now() + ONE_YEAR),
